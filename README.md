@@ -93,7 +93,7 @@ dist\0.2.4beta\uninstall.bat
 
 - 当前版本位于 `src/WhisperClock/`，发布产物在 `dist/<版本>/`（构建生成，不入库）。
 - 发版流程：改 `src/WhisperClock/WhisperClock.csproj` 的 `<Version>` / `<FileVersion>` → `dotnet publish -o dist/<版本>` → `git commit` → `git tag v<版本>`。
-- `0.1.0` ~ `0.2.4alpha` 的历史演进以 tag/提交形式在本仓库继续记录。
+- `0.1.0` ~ `0.2.4alpha` 的历史快照保留在本地 `archive/`（不入库）；从当前版本起用 tag 记录演进。
 
 ### 旧版归档（`archive/`，入库已忽略）
 
