@@ -793,11 +793,11 @@ namespace WhisperClock
             {
                 _alarms.Remove(alarm);
                 SaveAlarms();
-                RefreshList($"“{alarm.Title}”本次提醒已结束（单次闹钟已删除）");
+                RefreshList($"“{alarm.Title}”已结束并删除");
             }
             else if (wasRinging)
             {
-                _lblStatus.Text = $"“{alarm.Title}”本次提醒已结束（{FormatWaitSeconds(ResolvePlayWaitSeconds(alarm))}后停止响铃）";
+                _lblStatus.Text = $"“{alarm.Title}”已结束";
             }
         }
 
@@ -949,9 +949,7 @@ namespace WhisperClock
                 // （单次播放 8 秒 / 循环播放 5 分钟）；不再写死 AudioDelaySeconds + 2。
                 _ = FinishPlaybackLater(alarm, generation, TimeSpan.FromSeconds(AudioDelayFor(alarm) + waitSeconds));
 
-                _lblStatus.Text += alarm.Mode == AlarmMode.NotifyOnly
-                    ? $"（仅通知：{FormatWaitSeconds(waitSeconds)}后结束）"
-                    : $"（纯提醒：{FormatWaitSeconds(waitSeconds)}后结束）";
+                _lblStatus.Text += $"（{FormatWaitSeconds(waitSeconds)}后结束）";
                 return;
             }
 
@@ -966,9 +964,7 @@ namespace WhisperClock
             _ = StopPlaybackLater(alarm, generation,
                 TimeSpan.FromSeconds(AudioDelayFor(alarm) + waitSeconds));
 
-            _lblStatus.Text += fromSnooze
-                ? $"（待确认：{FormatWaitSeconds(waitSeconds)}后停声，可结束或再贪睡）"
-                : $"（待确认：{FormatWaitSeconds(waitSeconds)}后停声，可贪睡、打开或结束）";
+            _lblStatus.Text += $"（{FormatWaitSeconds(waitSeconds)}后停声）";
         }
 
         /// <summary>等待设置的音频延迟秒数后播放铃声；期间若已贪睡/停止/删除则不再播放。</summary>

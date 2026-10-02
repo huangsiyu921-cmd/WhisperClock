@@ -123,13 +123,12 @@ namespace WhisperClock
             _rbOnce = new RadioButton { Text = "单次播放", Location = new Point(110, 314), AutoSize = true, Checked = true };
             _rbLoop = new RadioButton { Text = "循环播放", Location = new Point(212, 314), AutoSize = true };
 
-            // 响铃等待时间：音频开始播放后等这么久就停止响铃（不再写死）。单位可选秒/分钟，
-            // 仅“仅通知 / 纯提醒”模式使用；普通模式走确认期 + 自动贪睡，不看这个值。
-            var lblWait = new Label { Text = "响铃等待", Location = new Point(16, 350), AutoSize = true };
+            // 等待时长：音频开始播放后等这么久就停止响铃（不再写死）。单位可选秒/分钟。
+            // 所有闹钟模式都适用——普通模式到点只停声音，确认期/自动贪睡照常。
+            var lblWait = new Label { Text = "等待时长", Location = new Point(16, 350), AutoSize = true };
             _numWait = new NumericUpDown { Location = new Point(110, 346), Size = new Size(70, 23) };
             _cmbWaitUnit = new ComboBox { Location = new Point(186, 346), Size = new Size(62, 25) };
             WaitTimeInput.Bind(_numWait, _cmbWaitUnit);
-            var lblWaitHint = new Label { Text = "仅通知/纯提醒有效", Location = new Point(256, 350), AutoSize = true };
 
             _chkOneShot = new CheckBox { Text = "单次闹钟", Location = new Point(110, 382), AutoSize = true };
             // 登录时触发：程序启动（开机自启）即触发一次，不按设定时间；勾选后时间/随机设置无效。
@@ -155,7 +154,7 @@ namespace WhisperClock
                 lblSnoozeSubtitle, _txtSnoozeSubtitle,
                 lblAlarmMode, _cmbMode,
                 lblMode, _rbOnce, _rbLoop,
-                lblWait, _numWait, _cmbWaitUnit, lblWaitHint,
+                lblWait, _numWait, _cmbWaitUnit,
                 _chkOneShot, _chkTriggerAtLogin, _chkEnabled,
                 btnOk, btnCancel
             });

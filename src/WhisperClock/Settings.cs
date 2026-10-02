@@ -38,7 +38,7 @@ namespace WhisperClock
         public string DefaultAutoSnoozeTitle { get; set; } = "⏰ 已自动贪睡";
 
         /// <summary>“未操作自动贪睡”提示 Toast 的默认副标题（在“默认模板…”中自定义）。</summary>
-        public string DefaultAutoSnoozeSubtitle { get; set; } = "闹钟无人操作，稍后将再次提醒";
+        public string DefaultAutoSnoozeSubtitle { get; set; } = "稍后将再次提醒";
 
         /// <summary>Toast“打开”按钮文字。</summary>
         public string DefaultOpenButton { get; set; } = "打开";
@@ -102,7 +102,7 @@ namespace WhisperClock
             DefaultSnoozeTitle = "⏰ 贪睡结束！";
             DefaultSnoozeSubtitle = "该起床啦！";
             DefaultAutoSnoozeTitle = "⏰ 已自动贪睡";
-            DefaultAutoSnoozeSubtitle = "闹钟无人操作，稍后将再次提醒";
+            DefaultAutoSnoozeSubtitle = "稍后将再次提醒";
             DefaultOpenButton = "打开";
             DefaultSnoozeButton = "延迟 {0} 分钟";
             DefaultDismissButton = "结束";

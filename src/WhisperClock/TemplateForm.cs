@@ -85,13 +85,13 @@ namespace WhisperClock
 
             _chkOneShot = new CheckBox { Text = "默认单次闹钟（触发后自动删除）", Location = new Point(110, 358), AutoSize = true };
 
-            // 新建闹钟的默认响铃等待时间（秒）：单次播放默认 8 秒、循环播放默认 5 分钟，都可改。
-            var lblWaitOnce = new Label { Text = "单次响铃等待", Location = new Point(16, 390), AutoSize = true };
+            // 新建闹钟的默认等待时长（秒）：单次播放 8 秒 / 循环播放 5 分钟；所有模式都适用。
+            var lblWaitOnce = new Label { Text = "单次等待时长", Location = new Point(16, 390), AutoSize = true };
             _numWaitOnce = new NumericUpDown { Location = new Point(110, 386), Size = new Size(70, 23) };
             _cmbWaitOnceUnit = new ComboBox { Location = new Point(186, 386), Size = new Size(62, 25) };
             WaitTimeInput.Bind(_numWaitOnce, _cmbWaitOnceUnit);
 
-            var lblWaitLoop = new Label { Text = "循环响铃等待", Location = new Point(16, 422), AutoSize = true };
+            var lblWaitLoop = new Label { Text = "循环等待时长", Location = new Point(16, 422), AutoSize = true };
             _numWaitLoop = new NumericUpDown { Location = new Point(110, 418), Size = new Size(70, 23) };
             _cmbWaitLoopUnit = new ComboBox { Location = new Point(186, 418), Size = new Size(62, 25) };
             WaitTimeInput.Bind(_numWaitLoop, _cmbWaitLoopUnit);
