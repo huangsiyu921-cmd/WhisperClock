@@ -93,7 +93,9 @@ namespace WhisperClock
             _tickTimer.Tick += (_, _) => CheckAlarms();
             _tickTimer.Start();
 
-            FormClosing += (_, _) =>
+            // 只在窗体真正关闭时清理。必须用 FormClosed（不是 FormClosing）：点“×”只是隐藏到托盘，
+            // 那种情况下若停掉 _tickTimer，闹钟就再也不响了；释放图标还会让托盘图标抛 ObjectDisposedException。
+            FormClosed += (_, _) =>
             {
                 SystemEvents.SessionSwitch -= OnSessionSwitch;
                 ThemeManager.ThemeChanged -= OnThemeChanged;
@@ -1561,15 +1563,17 @@ namespace WhisperClock
         {
             bool dark = ThemeManager.IsDark;
 
-            var windowIcon = AppIcon.Load(dark, SystemInformation.IconSize);
-            _windowIcon?.Dispose();
-            _windowIcon = windowIcon;
-            Icon = windowIcon;
+            // 先装新图标、再放旧的：反过来的话，_notifyIcon 会短暂指向已释放的 Icon，
+            // 期间任何一次 NotifyIcon.UpdateIcon 都会抛 ObjectDisposedException。
+            var previousWindowIcon = _windowIcon;
+            _windowIcon = AppIcon.Load(dark, SystemInformation.IconSize);
+            Icon = _windowIcon;
+            previousWindowIcon?.Dispose();
 
-            var trayIcon = AppIcon.Load(dark, SystemInformation.SmallIconSize);
-            _trayIcon?.Dispose();
-            _trayIcon = trayIcon;
-            _notifyIcon.Icon = trayIcon;
+            var previousTrayIcon = _trayIcon;
+            _trayIcon = AppIcon.Load(dark, SystemInformation.SmallIconSize);
+            _notifyIcon.Icon = _trayIcon;
+            previousTrayIcon?.Dispose();
         }
 
         /// <summary>系统主题切换（ThemeManager.ThemeChanged）→ 重取图标。</summary>
