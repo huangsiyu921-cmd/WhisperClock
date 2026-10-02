@@ -11,6 +11,12 @@ Windows 桌面闹钟（C# / WinForms，.NET 6）。常驻系统托盘，用 Wind
 > 参与开发时请向维护者索取这些文件——尤其是旧版 README 里"手动注册 `AlarmClock.App` AUMID"
 > 的做法**已被废弃**（会造成系统"通知"设置出现多余条目），请勿照做。
 
+## 下载
+
+不想自己编译的话，直接去 [Releases](https://github.com/huangsiyu921-cmd/WhisperClock/releases) 下载最新的
+`WhisperClock-<版本>-win-x64.zip`，解压后运行 `WhisperClock.exe`（框架依赖发布，需要
+[.NET 6 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/6.0)）。
+
 ## 功能
 
 | 功能 | 说明 |
