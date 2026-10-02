@@ -44,6 +44,14 @@ namespace WhisperClock
         /// <summary>true = 循环播放（PlayLooping）；false = 单次播放（Play）。</summary>
         public bool Loop { get; set; }
 
+        /// <summary>
+        /// 响铃等待时间（秒）：音频开始播放后等待该时长即停止响铃（不再写死 2 秒）。
+        /// 仅“仅通知 / 纯提醒”模式据此收尾——单次闹钟顺带删除，常规闹钟只停声音。
+        /// &lt;= 0 表示未设置，运行时按播放模式回退到“默认模板…”里的默认值
+        /// （单次播放 8 秒、循环播放 300 秒）。普通模式不使用该值（走确认期 + 自动贪睡）。
+        /// </summary>
+        public double PlayWaitSeconds { get; set; }
+
         /// <summary>单次闹钟：触发一次（含贪睡重触发）后自动从列表删除。</summary>
         public bool OneShot { get; set; }
 

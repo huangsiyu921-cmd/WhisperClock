@@ -22,6 +22,12 @@ namespace WhisperClock
         public bool DefaultLoop { get; set; }
         public bool DefaultOneShot { get; set; }
 
+        /// <summary>新建闹钟的默认响铃等待时间（秒）——“单次播放”用，默认 8 秒。</summary>
+        public double DefaultPlayWaitSecondsOnce { get; set; } = 8;
+
+        /// <summary>新建闹钟的默认响铃等待时间（秒）——“循环播放”用，默认 300 秒（5 分钟）。</summary>
+        public double DefaultPlayWaitSecondsLoop { get; set; } = 300;
+
         /// <summary>贪睡提醒 Toast 的默认主标题（在“默认模板…”中自定义）。</summary>
         public string DefaultSnoozeTitle { get; set; } = "⏰ 贪睡结束！";
 
@@ -90,6 +96,8 @@ namespace WhisperClock
             DefaultSubtitle = "该起床啦！";
             DefaultLoop = false;
             DefaultOneShot = false;
+            DefaultPlayWaitSecondsOnce = 8;
+            DefaultPlayWaitSecondsLoop = 300;
             ShowTrayTipOnMinimize = false;
             DefaultSnoozeTitle = "⏰ 贪睡结束！";
             DefaultSnoozeSubtitle = "该起床啦！";

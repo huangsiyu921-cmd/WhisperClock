@@ -709,24 +709,37 @@ namespace WhisperClock
             } // foreach (_alarms)
         }
 
-        /// <summary>纯提醒单次闹钟：等音频真正播起来后延迟删除（避免立即删除把刚播的声音掐掉）。</summary>
-        private async Task DelayedRemoveOneShot(Alarm alarm, TimeSpan delay)
+        /// <summary>
+        /// 仅通知 / 纯提醒模式的收尾：等音频播起来并到达“响铃等待时间”后停止响铃
+        /// （等待时长由闹钟自身或“默认模板…”配置，不再写死 2 秒——原来长于 2 秒的 wav 会被掐断）。
+        /// 单次闹钟顺带删除；常规闹钟只停声音并清掉响铃标记（下次照常提醒）。
+        /// </summary>
+        private async Task FinishPlaybackLater(Alarm alarm, TimeSpan delay)
         {
             await Task.Delay(delay);
             if (InvokeRequired)
             {
-                BeginInvoke(new Action(() => { _ = DelayedRemoveOneShot(alarm, TimeSpan.Zero); }));
+                BeginInvoke(new Action(() => { _ = FinishPlaybackLater(alarm, TimeSpan.Zero); }));
                 return;
             }
 
             if (!_alarms.Contains(alarm))
                 return; // 已被用户手动删除/禁用
 
-            _alarms.Remove(alarm);
-            StopSound(alarm.Id); // 清理播放器（若仍在循环播放则停掉）
-            SaveAlarms();
-            RefreshList();
-            _lblStatus.Text = $"“{alarm.Title}”纯提醒已结束（单次闹钟已删除）";
+            bool wasRinging = IsRinging(alarm.Id);
+            StopSound(alarm.Id); // 停止播放器并清 _ringingIds（非单次闹钟原来会一直留着标记）
+
+            if (alarm.OneShot)
+            {
+                _alarms.Remove(alarm);
+                SaveAlarms();
+                RefreshList(); // RefreshList 会重写状态栏，提示文本必须在它之后设置
+                _lblStatus.Text = $"“{alarm.Title}”本次提醒已结束（单次闹钟已删除）";
+            }
+            else if (wasRinging)
+            {
+                _lblStatus.Text = $"“{alarm.Title}”本次提醒已结束（{FormatWaitSeconds(ResolvePlayWaitSeconds(alarm))}后停止响铃）";
+            }
         }
 
         /// <summary>会话切换事件（SystemEvents 在系统线程回调，需封送 UI 线程）：
@@ -789,6 +802,32 @@ namespace WhisperClock
         /// <summary>分钟标识，用于“同一分钟最多触发一次”。</summary>
         private static string MinuteKey(DateTime time) => time.ToString("yyyyMMddHHmm");
 
+        /// <summary>音频延迟秒数：登录时触发的闹钟跳过延迟（越快越好），与 DelayPlaySound 保持一致。</summary>
+        private double AudioDelayFor(Alarm alarm)
+            => alarm.TriggerAtLogin ? 0 : Math.Max(0, _settings.AudioDelaySeconds);
+
+        /// <summary>
+        /// 解析闹钟的“响铃等待时间”（秒）：闹钟自身值 &gt; 0 用它；否则按播放模式回退到
+        /// “默认模板…”的默认值（单次播放 8 秒 / 循环播放 300 秒），最后再硬编码兜底防设置损坏。
+        /// </summary>
+        private double ResolvePlayWaitSeconds(Alarm alarm)
+        {
+            if (alarm.PlayWaitSeconds > 0)
+                return alarm.PlayWaitSeconds;
+
+            double configured = alarm.Loop ? _settings.DefaultPlayWaitSecondsLoop : _settings.DefaultPlayWaitSecondsOnce;
+            if (configured > 0)
+                return configured;
+
+            return alarm.Loop ? 300 : 8;
+        }
+
+        /// <summary>把秒数显示成简短中文：整分钟用“N 分钟”，否则用“N 秒”。</summary>
+        private static string FormatWaitSeconds(double seconds)
+            => seconds >= 60 && Math.Abs(seconds % 60) < 0.001
+                ? $"{seconds / 60:0.##} 分钟"
+                : $"{seconds:0.##} 秒";
+
         private void Trigger(Alarm alarm, bool fromSnooze, DateTime now)
         {
             _lblStatus.Text = fromSnooze
@@ -809,16 +848,15 @@ namespace WhisperClock
                     OpenExternal(alarm.OpenTarget); // 链接直接打开（后台线程执行，不阻塞）
                 DelayPlaySound(alarm);
 
-                if (alarm.OneShot)
-                {
-                    // 单次闹钟：延迟与音频启动保持同步后删除，避免 StopSound 掐掉刚播的声音。
-                    var delay = TimeSpan.FromSeconds(Math.Max(0, _settings.AudioDelaySeconds) + 2);
-                    _ = DelayedRemoveOneShot(alarm, delay);
-                }
-                else
-                {
-                    _lblStatus.Text += alarm.Mode == AlarmMode.NotifyOnly ? "（仅通知：已结束）" : "（纯提醒：已结束）";
-                }
+                // 响铃等待：音频开始播放后等待“响铃等待时间”再停止响铃（单次闹钟顺带删除）。
+                // 时长取闹钟自身设置，未设置则按播放模式回退到“默认模板…”的默认值
+                // （单次播放 8 秒 / 循环播放 5 分钟）；不再写死 AudioDelaySeconds + 2。
+                double waitSeconds = ResolvePlayWaitSeconds(alarm);
+                _ = FinishPlaybackLater(alarm, TimeSpan.FromSeconds(AudioDelayFor(alarm) + waitSeconds));
+
+                _lblStatus.Text += alarm.Mode == AlarmMode.NotifyOnly
+                    ? $"（仅通知：{FormatWaitSeconds(waitSeconds)}后结束）"
+                    : $"（纯提醒：{FormatWaitSeconds(waitSeconds)}后结束）";
                 return;
             }
 
@@ -840,8 +878,7 @@ namespace WhisperClock
             try
             {
                 // 登录时触发的闹钟“越快越好”：跳过音频延迟设置（AudioDelaySeconds 默认 3 秒会拖慢登录提示）。
-                double delaySeconds = alarm.TriggerAtLogin ? 0 : Math.Max(0, _settings.AudioDelaySeconds);
-                await Task.Delay(TimeSpan.FromSeconds(delaySeconds));
+                await Task.Delay(TimeSpan.FromSeconds(AudioDelayFor(alarm)));
 
                 // Load + 播放放到后台线程：大 .wav 的同步 Load 不再卡 UI 线程，
                 // 避免“通知打开/贪睡”等激活操作因 UI 被占用而迟迟得不到处理。

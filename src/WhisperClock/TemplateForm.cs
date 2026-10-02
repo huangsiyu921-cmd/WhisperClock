@@ -21,13 +21,17 @@ namespace WhisperClock
         private RadioButton _rbOnce = null!;
         private RadioButton _rbLoop = null!;
         private CheckBox _chkOneShot = null!;
+        private NumericUpDown _numWaitOnce = null!;
+        private ComboBox _cmbWaitOnceUnit = null!;
+        private NumericUpDown _numWaitLoop = null!;
+        private ComboBox _cmbWaitLoopUnit = null!;
 
         public TemplateForm(AppSettings settings)
         {
             _settings = settings;
 
             Text = "默认闹钟模板";
-            ClientSize = new Size(430, 460);
+            ClientSize = new Size(430, 510);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
@@ -76,7 +80,18 @@ namespace WhisperClock
 
             _chkOneShot = new CheckBox { Text = "默认单次闹钟（触发后自动删除）", Location = new Point(110, 358), AutoSize = true };
 
-            var btnReset = new Button { Text = "恢复最初默认", Location = new Point(16, 400), Size = new Size(130, 30) };
+            // 新建闹钟的默认响铃等待时间（秒）：单次播放默认 8 秒、循环播放默认 5 分钟，都可改。
+            var lblWaitOnce = new Label { Text = "单次响铃等待", Location = new Point(16, 390), AutoSize = true };
+            _numWaitOnce = new NumericUpDown { Location = new Point(110, 386), Size = new Size(70, 23) };
+            _cmbWaitOnceUnit = new ComboBox { Location = new Point(186, 386), Size = new Size(62, 25) };
+            WaitTimeInput.Bind(_numWaitOnce, _cmbWaitOnceUnit);
+
+            var lblWaitLoop = new Label { Text = "循环响铃等待", Location = new Point(16, 422), AutoSize = true };
+            _numWaitLoop = new NumericUpDown { Location = new Point(110, 418), Size = new Size(70, 23) };
+            _cmbWaitLoopUnit = new ComboBox { Location = new Point(186, 418), Size = new Size(62, 25) };
+            WaitTimeInput.Bind(_numWaitLoop, _cmbWaitLoopUnit);
+
+            var btnReset = new Button { Text = "恢复最初默认", Location = new Point(16, 464), Size = new Size(130, 30) };
             btnReset.Click += (_, _) =>
             {
                 // 一键恢复：直接重置为出厂默认并保存。
@@ -87,8 +102,8 @@ namespace WhisperClock
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
             };
 
-            var btnOk = new Button { Text = "确定", Location = new Point(250, 400), Size = new Size(80, 30), DialogResult = DialogResult.OK };
-            var btnCancel = new Button { Text = "取消", Location = new Point(338, 400), Size = new Size(80, 30), DialogResult = DialogResult.Cancel };
+            var btnOk = new Button { Text = "确定", Location = new Point(250, 464), Size = new Size(80, 30), DialogResult = DialogResult.OK };
+            var btnCancel = new Button { Text = "取消", Location = new Point(338, 464), Size = new Size(80, 30), DialogResult = DialogResult.Cancel };
             AcceptButton = btnOk;
             CancelButton = btnCancel;
             btnOk.Click += (_, _) => Save();
@@ -106,6 +121,8 @@ namespace WhisperClock
                 lblDismissButton, _txtDismissButton,
                 lblMode, _rbOnce, _rbLoop,
                 _chkOneShot,
+                lblWaitOnce, _numWaitOnce, _cmbWaitOnceUnit,
+                lblWaitLoop, _numWaitLoop, _cmbWaitLoopUnit,
                 btnReset, btnOk, btnCancel
             });
         }
@@ -124,6 +141,12 @@ namespace WhisperClock
             _rbLoop.Checked = _settings.DefaultLoop;
             _rbOnce.Checked = !_settings.DefaultLoop;
             _chkOneShot.Checked = _settings.DefaultOneShot;
+
+            // 响铃等待时间（秒）：单次播放默认 8 秒、循环播放默认 300 秒（5 分钟）。
+            WaitTimeInput.SetSeconds(_numWaitOnce, _cmbWaitOnceUnit,
+                _settings.DefaultPlayWaitSecondsOnce > 0 ? _settings.DefaultPlayWaitSecondsOnce : 8);
+            WaitTimeInput.SetSeconds(_numWaitLoop, _cmbWaitLoopUnit,
+                _settings.DefaultPlayWaitSecondsLoop > 0 ? _settings.DefaultPlayWaitSecondsLoop : 300);
         }
 
         private void Save()
@@ -151,6 +174,8 @@ namespace WhisperClock
                 : _txtDismissButton.Text.Trim();
             _settings.DefaultLoop = _rbLoop.Checked;
             _settings.DefaultOneShot = _chkOneShot.Checked;
+            _settings.DefaultPlayWaitSecondsOnce = WaitTimeInput.GetSeconds(_numWaitOnce, _cmbWaitOnceUnit);
+            _settings.DefaultPlayWaitSecondsLoop = WaitTimeInput.GetSeconds(_numWaitLoop, _cmbWaitLoopUnit);
             _settings.Save();
         }
     }
