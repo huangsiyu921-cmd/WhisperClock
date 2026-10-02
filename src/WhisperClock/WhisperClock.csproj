@@ -9,8 +9,8 @@
     <AssemblyName>WhisperClock</AssemblyName>
     <RootNamespace>WhisperClock</RootNamespace>
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
-    <Version>0.2.4-beta</Version>
-    <FileVersion>0.2.4.0</FileVersion>
+    <Version>0.2.5-beta</Version>
+    <FileVersion>0.2.5.0</FileVersion>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
 
