@@ -39,8 +39,11 @@ whisperClock/
 ├─ docs/                      本地内部文档（不推送，见上）
 ├─ dist/<版本>/               发布产物（dotnet publish 输出，不入库）
 ├─ archive/                   旧版手动版本归档（不入库，见下）
+├─ WhisperClock.ico           项目图标（与 src 里的 Assets\app.ico 同一份）
 ├─ LICENSE                    GPL-3.0
-└─ README.md
+├─ README.md
+├─ .gitignore
+└─ .gitattributes
 ```
 
 `tools/` 下的两个脚本在**发布目录**（`dist/<版本>/`）里也各有一份，因为
