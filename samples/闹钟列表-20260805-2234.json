@@ -1,0 +1,30 @@
+[
+  {
+    "Id": "596012ba-0dec-49ef-911b-b232c397adfe",
+    "TimeOfDay": "00:00:00",
+    "RandomOffsetSeconds": 80,
+    "Title": "\u67AB\u9999",
+    "Subtitle": "\u5DF2\u7ECF\u5F88\u665A\u4E86......\u4ECA\u5929\u5C31\u8FD9\u6837\u4F11\u606F\u5427\uFF1F",
+    "SnoozeTitle": "\u305B\u3093\u305B\u3044\uFF01",
+    "SnoozeSubtitle": "\u4E0D\u8981\u518D\u62D6\u4E86\uD83D\uDD14",
+    "AudioPath": "D:\\voice\\Fuuka\\\u96F6\u70B9\u63D0\u9192",
+    "Loop": false,
+    "OneShot": false,
+    "OpenTarget": null,
+    "Enabled": true
+  },
+  {
+    "Id": "2734ecbe-40d3-4281-99c5-afa851cf9e97",
+    "TimeOfDay": "23:22:49",
+    "RandomOffsetSeconds": 140,
+    "Title": "A.R.O.N.A",
+    "Subtitle": "\u591A\u90BB\u56FD\u6253\u5361\u65F6\u95F4\u5230\uFF01",
+    "SnoozeTitle": "\u305B\u3093\u305B\u3044\uFF01",
+    "SnoozeSubtitle": "\u8FDE\u80DC\u8981\u65AD\u4E86\u54E6\uFF01",
+    "AudioPath": "D:\\voice\\A.R.O.N.A\\duolingo",
+    "Loop": false,
+    "OneShot": false,
+    "OpenTarget": "https://www.duolingo.cn/learn",
+    "Enabled": true
+  }
+]

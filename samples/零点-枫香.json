@@ -1,0 +1,13 @@
+{
+  "Id": "596012ba-0dec-49ef-911b-b232c397adfe",
+  "TimeOfDay": "00:00:00",
+  "Title": "\u67AB\u9999",
+  "Subtitle": "\u5DF2\u7ECF\u5F88\u665A\u4E86......\u4ECA\u5929\u5C31\u8FD9\u6837\u4F11\u606F\u5427\uFF1F",
+  "SnoozeTitle": "\u305B\u3093\u305B\u3044\uFF01",
+  "SnoozeSubtitle": "\u4E0D\u8981\u518D\u62D6\u4E86\uD83D\uDD14",
+  "AudioPath": "D:\\voice\\Fuuka\\\u96F6\u70B9\u63D0\u9192",
+  "Loop": false,
+  "OneShot": false,
+  "OpenTarget": null,
+  "Enabled": true
+}
