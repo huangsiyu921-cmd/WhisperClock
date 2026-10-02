@@ -27,6 +27,12 @@ namespace WhisperClock
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "AlarmClock", "debug.log");
 
+        /// <summary>
+        /// 日志体积上限（1 MB）：超过就把当前日志改名为 debug.log.old 后重开。
+        /// 程序常驻托盘且每次触发/激活都写日志，不加限制会无限增长。
+        /// </summary>
+        private const long MaxLogBytes = 1024 * 1024;
+
         /// <summary>追加一行调试日志；写失败不影响主流程。UTF-8 带 BOM，方便记事本直接查看中文。</summary>
         private static readonly object LogLock = new();
 
@@ -39,6 +45,9 @@ namespace WhisperClock
                     var dir = Path.GetDirectoryName(LogPath);
                     if (!string.IsNullOrEmpty(dir))
                         Directory.CreateDirectory(dir);
+
+                    RotateLogIfTooLarge();
+
                     File.AppendAllText(LogPath,
                         $"[{DateTime.Now:HH:mm:ss.fff}] {message}{Environment.NewLine}",
                         new UTF8Encoding(true));
@@ -47,6 +56,26 @@ namespace WhisperClock
                 {
                     // 忽略日志写入失败。
                 }
+            }
+        }
+
+        /// <summary>日志超过上限时轮转一代（debug.log → debug.log.old），只保留一代。</summary>
+        private static void RotateLogIfTooLarge()
+        {
+            var info = new FileInfo(LogPath);
+            if (!info.Exists || info.Length <= MaxLogBytes)
+                return;
+
+            try
+            {
+                string previous = LogPath + ".old";
+                if (File.Exists(previous))
+                    File.Delete(previous);
+                File.Move(LogPath, previous);
+            }
+            catch
+            {
+                // 轮转失败（文件被占用等）就继续追加，不影响主流程。
             }
         }
 

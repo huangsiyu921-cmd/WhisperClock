@@ -50,7 +50,12 @@ namespace WhisperClock
             BuildUi();
             LoadValues();
 
-            Load += (_, _) => ThemeManager.Apply(this);
+            Load += (_, _) =>
+            {
+                ThemeManager.Apply(this);
+                Icon = AppIcon.Load(ThemeManager.IsDark, SystemInformation.IconSize); // 标题栏图标跟随主题
+            };
+            FormClosed += (_, _) => Icon?.Dispose();
         }
 
         private void BuildUi()
@@ -83,11 +88,14 @@ namespace WhisperClock
             _txtSubtitle = new TextBox { Location = new Point(110, 114), Size = new Size(290, 23) };
 
             var lblAudio = new Label { Text = "音频文件", Location = new Point(16, 156), AutoSize = true };
-            _txtAudio = new TextBox { Location = new Point(110, 152), Size = new Size(150, 23), ReadOnly = true };
-            var btnBrowseFile = new Button { Text = "文件…", Location = new Point(268, 150), Size = new Size(62, 26) };
+            _txtAudio = new TextBox { Location = new Point(110, 152), Size = new Size(128, 23), ReadOnly = true };
+            var btnBrowseFile = new Button { Text = "文件…", Location = new Point(244, 150), Size = new Size(56, 26) };
             btnBrowseFile.Click += (_, _) => BrowseAudioFile();
-            var btnBrowseFolder = new Button { Text = "文件夹…", Location = new Point(338, 150), Size = new Size(76, 26) };
+            var btnBrowseFolder = new Button { Text = "文件夹…", Location = new Point(304, 150), Size = new Size(64, 26) };
             btnBrowseFolder.Click += (_, _) => BrowseAudioFolder();
+            // 清除：文本框只读，原来只能选不能清，设了铃声就没法改回“不响铃、只发通知”。
+            var btnClearAudio = new Button { Text = "清除", Location = new Point(372, 150), Size = new Size(54, 26) };
+            btnClearAudio.Click += (_, _) => _txtAudio.Text = "";
 
             var lblOpen = new Label { Text = "打开目标", Location = new Point(16, 188), AutoSize = true };
             _txtOpenTarget = new TextBox { Location = new Point(110, 184), Size = new Size(200, 23) };
@@ -141,7 +149,7 @@ namespace WhisperClock
                 lblRandom, _numRandomOffset, lblRandomHint,
                 lblTitle, _txtTitle,
                 lblSubtitle, _txtSubtitle,
-                lblAudio, _txtAudio, btnBrowseFile, btnBrowseFolder,
+                lblAudio, _txtAudio, btnBrowseFile, btnBrowseFolder, btnClearAudio,
                 lblOpen, _txtOpenTarget, btnBrowseOpen,
                 lblSnoozeTitle, _txtSnoozeTitle,
                 lblSnoozeSubtitle, _txtSnoozeSubtitle,

@@ -42,7 +42,12 @@ namespace WhisperClock
             BuildUi();
             LoadFromSettings();
 
-            Load += (_, _) => ThemeManager.Apply(this);
+            Load += (_, _) =>
+            {
+                ThemeManager.Apply(this);
+                Icon = AppIcon.Load(ThemeManager.IsDark, SystemInformation.IconSize); // 标题栏图标跟随主题
+            };
+            FormClosed += (_, _) => Icon?.Dispose();
         }
 
         private void BuildUi()

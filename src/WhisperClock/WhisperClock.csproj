@@ -18,4 +18,13 @@
     <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- 运行时按系统主题切换图标：两个 ico 都作为嵌入资源。
+         app.ico 同时是 exe 的 ApplicationIcon（浅色背景用深线条版），
+         app-dark.ico 供深色主题（深色任务栏/标题栏）用白线条版。
+         小尺寸条目刻意用 DIB（BMP）而非 PNG——GDI+ 的 Icon 解析器读不了 PNG 条目。 -->
+    <EmbeddedResource Include="Assets\app.ico" />
+    <EmbeddedResource Include="Assets\app-dark.ico" />
+  </ItemGroup>
+
 </Project>

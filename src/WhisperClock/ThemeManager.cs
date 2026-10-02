@@ -15,6 +15,9 @@ namespace WhisperClock
 
         public static bool IsDark { get; private set; }
 
+        /// <summary>系统主题发生变化后触发（在 UI 线程上；订阅方据此刷新需要跟随主题的图标等）。</summary>
+        public static event Action? ThemeChanged;
+
         /// <summary>在程序入口调用一次：检测当前系统主题，并监听主题切换自动重刷界面。</summary>
         public static void Init()
         {
@@ -27,6 +30,9 @@ namespace WhisperClock
                     IsDark = IsSystemDark();
                     foreach (Form form in Application.OpenForms)
                         Apply(form);
+
+                    // 窗体之外的跟随项（托盘图标等）。
+                    ThemeChanged?.Invoke();
                 }
             };
         }

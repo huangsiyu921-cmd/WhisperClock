@@ -43,8 +43,9 @@ namespace WhisperClock
         private string? _lastActivation;
         private DateTime _lastActivationAt;
 
-        /// <summary>用于文件夹铃声的随机选择。</summary>
-        private static readonly Random _random = new();
+        /// <summary>每个闹钟的“本次响铃代际”：每次 Trigger 自增；延迟停声任务到点时会核对，
+        /// 避免把“下一轮贪睡触发”的响铃停掉。（随机选曲改用线程安全的 Random.Shared，不再需要实例字段。）</summary>
+        private readonly Dictionary<Guid, int> _ringGenerations = new();
 
         // ---- 控件 ----
         private readonly AppSettings _settings = AppSettings.Load();
@@ -77,8 +78,6 @@ namespace WhisperClock
         {
             Text = "Whisper";
             ClientSize = new Size(700, 410);
-            // 窗口 / 任务栏图标：使用 exe 内置的自定义闹钟图标。
-            Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? SystemIcons.Application;
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
@@ -97,7 +96,11 @@ namespace WhisperClock
             FormClosing += (_, _) =>
             {
                 SystemEvents.SessionSwitch -= OnSessionSwitch;
+                ThemeManager.ThemeChanged -= OnThemeChanged;
+                _tickTimer.Stop();
+                _tickTimer.Dispose();
                 StopAllSounds();
+                DisposeThemeIcons();
             };
 
             // 兜底：若激活参数到达时主窗体已显示（例如进程因 Toast 点击而启动），在此处统一消费。
@@ -116,6 +119,7 @@ namespace WhisperClock
             };
 
             BuildTrayIcon();
+            ApplyThemeIcons(); // 窗口 + 托盘图标：深色主题用白线条版，浅色主题用深线条版
 
             // 暗色模式：窗体显示前应用当前系统主题（含暗色标题栏）。
             // 登录时触发的闹钟也在 Load 触发——比 Shown 更早，越快越好（用户要求）。
@@ -126,6 +130,7 @@ namespace WhisperClock
             Load += (_, _) =>
             {
                 ThemeManager.Apply(this);
+                ThemeManager.ThemeChanged += OnThemeChanged; // 系统主题切换 → 换窗口/托盘图标
 
                 // 登录闹钟“进桌面判定”：隐形登录的 SessionLock 事件可能发生在订阅前而错过，
                 // 10 秒兜底又会抢跑（锁屏时触发 → Toast 弹出但锁屏会话无声）。
@@ -203,6 +208,8 @@ namespace WhisperClock
             };
             _numSnooze.ValueChanged += (_, _) =>
             {
+                if (_loadingSettings)
+                    return; // 载入时的赋值不算用户修改
                 _settings.SnoozeMinutes = (int)_numSnooze.Value;
                 _settings.Save();
             };
@@ -210,6 +217,8 @@ namespace WhisperClock
             _chkTrayTip = new CheckBox { Text = "最小化时显示提示", Location = new Point(310, 340), AutoSize = true };
             _chkTrayTip.CheckedChanged += (_, _) =>
             {
+                if (_loadingSettings)
+                    return;
                 _settings.ShowTrayTipOnMinimize = _chkTrayTip.Checked;
                 _settings.Save();
             };
@@ -227,6 +236,8 @@ namespace WhisperClock
             };
             _numDelay.ValueChanged += (_, _) =>
             {
+                if (_loadingSettings)
+                    return;
                 _settings.AudioDelaySeconds = (double)_numDelay.Value;
                 _settings.Save();
             };
@@ -253,12 +264,23 @@ namespace WhisperClock
             });
         }
 
+        /// <summary>载入设置行控件期间为 true：避免赋值触发的 ValueChanged 把 clamp 后的值又写回设置。</summary>
+        private bool _loadingSettings;
+
         /// <summary>把已保存的设置载入设置行控件。</summary>
         private void LoadSettingsToControls()
         {
-            _numSnooze.Value = Math.Clamp(_settings.SnoozeMinutes, 1, 60);
-            _numDelay.Value = Math.Clamp((decimal)_settings.AudioDelaySeconds, 0, 30);
-            _chkTrayTip.Checked = _settings.ShowTrayTipOnMinimize;
+            _loadingSettings = true;
+            try
+            {
+                _numSnooze.Value = Math.Clamp(_settings.SnoozeMinutes, 1, 60);
+                _numDelay.Value = Math.Clamp((decimal)_settings.AudioDelaySeconds, 0, 30);
+                _chkTrayTip.Checked = _settings.ShowTrayTipOnMinimize;
+            }
+            finally
+            {
+                _loadingSettings = false;
+            }
         }
 
         // ==================== 闹钟增删改 ====================
@@ -270,8 +292,7 @@ namespace WhisperClock
             {
                 _alarms.Add(dialog.Alarm);
                 SaveAlarms();
-                RefreshList();
-                _lblStatus.Text = "已添加闹钟：" + dialog.Alarm.Title;
+                RefreshList("已添加闹钟：" + dialog.Alarm.Title);
             }
         }
 
@@ -291,7 +312,7 @@ namespace WhisperClock
             if (dialog.ShowDialog(this) == DialogResult.OK)
             {
                 SaveAlarms();
-                RefreshList();
+                RefreshList($"已保存闹钟：“{alarm.Title}”");
             }
         }
 
@@ -312,7 +333,7 @@ namespace WhisperClock
             }
 
             SaveAlarms();
-            RefreshList();
+            RefreshList($"“{alarm.Title}”已{(alarm.Enabled ? "启用" : "禁用")}");
         }
 
         private void DeleteSelected()
@@ -331,7 +352,7 @@ namespace WhisperClock
             _alarms.Remove(alarm);
             StopSound(alarm.Id);
             SaveAlarms();
-            RefreshList();
+            RefreshList($"已删除闹钟：“{alarm.Title}”");
         }
 
         /// <summary>打开选中闹钟的“打开目标”（程序用系统默认程序打开网址/应用/文件）。</summary>
@@ -378,18 +399,15 @@ namespace WhisperClock
             alarm.SnoozeUntil = null;
             alarm.PendingDeleteUntil = null;
 
-            if (alarm.OneShot)
-            {
+            bool removed = alarm.OneShot;
+            if (removed)
                 _alarms.Remove(alarm);
-                _lblStatus.Text = $"“{alarm.Title}”已结束并删除";
-            }
-            else
-            {
-                _lblStatus.Text = $"“{alarm.Title}”已结束，明天照常提醒";
-            }
 
             SaveAlarms();
-            RefreshList();
+            // 提示必须经 RefreshList 传入：它会重写状态栏，先设文本再刷新会被盖掉。
+            RefreshList(removed
+                ? $"“{alarm.Title}”已结束并删除"
+                : $"“{alarm.Title}”已结束，明天照常提醒");
         }
 
         // ==================== 导出 / 导入 ====================
@@ -497,12 +515,12 @@ namespace WhisperClock
                 foreach (var a in list)
                 {
                     a.Id = Guid.NewGuid(); // 避免与现有闹钟 Id 冲突
+                    Normalize(a);          // 与 LoadAlarms 一致：旧的 RemindOnly 开关迁移为 Mode
                     _alarms.Add(a);
                 }
 
                 SaveAlarms();
-                RefreshList();
-                _lblStatus.Text = $"已导入 {list.Count} 个闹钟";
+                RefreshList($"已导入 {list.Count} 个闹钟");
             }
             catch (Exception ex)
             {
@@ -529,11 +547,27 @@ namespace WhisperClock
             return "等待";
         }
 
-        private void RefreshList()
+        /// <summary>重建列表，状态栏显示默认统计文本。</summary>
+        private void RefreshList() => RebuildList(DefaultStatusText());
+
+        /// <summary>重建列表并把状态栏设为指定提示（提示不会再被列表重建覆盖）。</summary>
+        private void RefreshList(string status) => RebuildList(status);
+
+        /// <summary>只同步列表内容、不动状态栏（供每秒检查里的状态变化使用）。</summary>
+        private void RefreshListSilently() => RebuildList(null);
+
+        private string DefaultStatusText() => _alarms.Count == 0
+            ? "没有闹钟，点击“添加闹钟”创建"
+            : $"共 {_alarms.Count} 个闹钟（双击列表项可编辑）";
+
+        private void RebuildList(string? status)
         {
+            var previouslySelected = SelectedAlarm; // 重建会丢选中项，重建后按引用恢复
+
             _listView.BeginUpdate();
             _listView.Items.Clear();
 
+            ListViewItem? toSelect = null;
             foreach (var alarm in _alarms)
             {
                 var item = new ListViewItem(AlarmStatusText(alarm));
@@ -544,12 +578,21 @@ namespace WhisperClock
                 item.SubItems.Add(string.IsNullOrEmpty(alarm.AudioPath) ? "（无）" : Path.GetFileName(alarm.AudioPath));
                 item.Tag = alarm;
                 _listView.Items.Add(item);
+
+                if (previouslySelected != null && ReferenceEquals(alarm, previouslySelected))
+                    toSelect = item;
             }
 
             _listView.EndUpdate();
-            _lblStatus.Text = _alarms.Count == 0
-                ? "没有闹钟，点击“添加闹钟”创建"
-                : $"共 {_alarms.Count} 个闹钟（双击列表项可编辑）";
+
+            if (toSelect != null)
+            {
+                toSelect.Selected = true;
+                toSelect.EnsureVisible();
+            }
+
+            if (status != null)
+                _lblStatus.Text = status;
         }
 
         // ==================== 持久化 ====================
@@ -566,9 +609,7 @@ namespace WhisperClock
                         _alarms.Clear();
                         foreach (var alarm in list)
                         {
-                            // 0.2.2alpha 的“纯提醒”开关迁移为纯提醒模式；新数据以 Mode 为准。
-                            if (alarm.RemindOnly && alarm.Mode == AlarmMode.Normal)
-                                alarm.Mode = AlarmMode.RemindOnly;
+                            Normalize(alarm);
                             _alarms.Add(alarm);
                         }
                     }
@@ -578,6 +619,16 @@ namespace WhisperClock
             {
                 // 数据损坏时从空列表开始。
             }
+        }
+
+        /// <summary>
+        /// 旧数据规范化：0.2.2alpha 的“纯提醒”开关（RemindOnly）迁移为 Mode（新数据以 Mode 为准）。
+        /// 加载和导入都要走这一步，否则“从文件导入”的旧数据行为与“直接加载”不一致。
+        /// </summary>
+        private static void Normalize(Alarm alarm)
+        {
+            if (alarm.RemindOnly && alarm.Mode == AlarmMode.Normal)
+                alarm.Mode = AlarmMode.RemindOnly;
         }
 
         private void SaveAlarms()
@@ -633,6 +684,7 @@ namespace WhisperClock
         private void CheckAlarms()
         {
             var now = DateTime.Now;
+            bool listStateChanged = false; // 列表“状态”列是否需要同步（触发 / 自动贪睡会改变它）
 
             foreach (var alarm in _alarms)
             {
@@ -645,6 +697,7 @@ namespace WhisperClock
                         alarm.LastTriggeredMinute = MinuteKey(now);
                         alarm.SnoozeUntil = null;
                         Trigger(alarm, fromSnooze: true, now);
+                        listStateChanged = true; // “贪睡中” → “等待”
                     }
                     continue;
                 }
@@ -673,7 +726,7 @@ namespace WhisperClock
                         if (!triggeredToday && alarm.RandomOffsetSeconds > 0 && alarm.RandomTriggerAt == null
                             && now >= target.AddSeconds(-alarm.RandomOffsetSeconds))
                         {
-                            int offset = _random.Next(-alarm.RandomOffsetSeconds, alarm.RandomOffsetSeconds + 1);
+                            int offset = Random.Shared.Next(-alarm.RandomOffsetSeconds, alarm.RandomOffsetSeconds + 1);
                             DateTime plan = target.AddSeconds(offset);
                             if (plan < target.Date)
                                 plan = target.Date; // 提前跨日 → 当天 00:00
@@ -704,9 +757,13 @@ namespace WhisperClock
                     alarm.SnoozeUntil = DateTime.Now.AddMinutes(_settings.SnoozeMinutes);
                     Program.Log($"自动贪睡：{alarm.Title}（未操作，{_settings.SnoozeMinutes} 分钟后再次提醒）");
                     _lblStatus.Text = $"“{alarm.Title}”未操作，已自动贪睡 {_settings.SnoozeMinutes} 分钟";
+                    listStateChanged = true; // “等待” → “贪睡中”
                     ShowAutoSnoozeToast(alarm); // 单独的“已自动贪睡”提示 Toast（无按钮）
                 }
             } // foreach (_alarms)
+
+            if (listStateChanged)
+                RefreshListSilently(); // 只同步列表内容，不覆盖状态栏提示
         }
 
         /// <summary>
@@ -714,17 +771,20 @@ namespace WhisperClock
         /// （等待时长由闹钟自身或“默认模板…”配置，不再写死 2 秒——原来长于 2 秒的 wav 会被掐断）。
         /// 单次闹钟顺带删除；常规闹钟只停声音并清掉响铃标记（下次照常提醒）。
         /// </summary>
-        private async Task FinishPlaybackLater(Alarm alarm, TimeSpan delay)
+        private async Task FinishPlaybackLater(Alarm alarm, int generation, TimeSpan delay)
         {
             await Task.Delay(delay);
             if (InvokeRequired)
             {
-                BeginInvoke(new Action(() => { _ = FinishPlaybackLater(alarm, TimeSpan.Zero); }));
+                BeginInvoke(new Action(() => { _ = FinishPlaybackLater(alarm, generation, TimeSpan.Zero); }));
                 return;
             }
 
             if (!_alarms.Contains(alarm))
                 return; // 已被用户手动删除/禁用
+
+            if (!IsCurrentRingGeneration(alarm, generation))
+                return; // 已被新一轮触发取代，别停错/删错
 
             bool wasRinging = IsRinging(alarm.Id);
             StopSound(alarm.Id); // 停止播放器并清 _ringingIds（非单次闹钟原来会一直留着标记）
@@ -733,12 +793,39 @@ namespace WhisperClock
             {
                 _alarms.Remove(alarm);
                 SaveAlarms();
-                RefreshList(); // RefreshList 会重写状态栏，提示文本必须在它之后设置
-                _lblStatus.Text = $"“{alarm.Title}”本次提醒已结束（单次闹钟已删除）";
+                RefreshList($"“{alarm.Title}”本次提醒已结束（单次闹钟已删除）");
             }
             else if (wasRinging)
             {
                 _lblStatus.Text = $"“{alarm.Title}”本次提醒已结束（{FormatWaitSeconds(ResolvePlayWaitSeconds(alarm))}后停止响铃）";
+            }
+        }
+
+        /// <summary>
+        /// 普通模式的“响铃等待”：到点只停本次响铃（清 _ringingIds），不动确认期 / 贪睡等状态机，
+        /// 也不改状态栏。期间若已触发新一轮（贪睡到点会再次 Trigger），代际不符则不动作。
+        /// </summary>
+        private async Task StopPlaybackLater(Alarm alarm, int generation, TimeSpan delay)
+        {
+            await Task.Delay(delay);
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => { _ = StopPlaybackLater(alarm, generation, TimeSpan.Zero); }));
+                return;
+            }
+
+            if (!_alarms.Contains(alarm) || !IsCurrentRingGeneration(alarm, generation))
+                return;
+
+            StopSound(alarm.Id);
+        }
+
+        /// <summary>核对闹钟当前的响铃代际是否仍是 generation（延迟任务到点后调用）。</summary>
+        private bool IsCurrentRingGeneration(Alarm alarm, int generation)
+        {
+            lock (_soundLock)
+            {
+                return _ringGenerations.TryGetValue(alarm.Id, out var current) && current == generation;
             }
         }
 
@@ -834,8 +921,17 @@ namespace WhisperClock
                 ? $"“{alarm.Title}”贪睡提醒已触发"
                 : $"“{alarm.Title}”闹钟已触发";
 
+            // “响铃等待”对普通模式与仅通知/纯提醒模式都生效，这里解析一次供两条路径共用。
+            double waitSeconds = ResolvePlayWaitSeconds(alarm);
+
+            int generation;
             lock (_soundLock)
+            {
                 _ringingIds.Add(alarm.Id); // 标记为待响铃；贪睡/结束/删除时移除
+                // 本次响铃的代际：延迟停声任务到点时会核对，避免把“下一轮贪睡触发”的响铃停掉。
+                generation = _ringGenerations.TryGetValue(alarm.Id, out var previous) ? previous + 1 : 1;
+                _ringGenerations[alarm.Id] = generation;
+            }
 
             if (alarm.Mode != AlarmMode.Normal)
             {
@@ -851,8 +947,7 @@ namespace WhisperClock
                 // 响铃等待：音频开始播放后等待“响铃等待时间”再停止响铃（单次闹钟顺带删除）。
                 // 时长取闹钟自身设置，未设置则按播放模式回退到“默认模板…”的默认值
                 // （单次播放 8 秒 / 循环播放 5 分钟）；不再写死 AudioDelaySeconds + 2。
-                double waitSeconds = ResolvePlayWaitSeconds(alarm);
-                _ = FinishPlaybackLater(alarm, TimeSpan.FromSeconds(AudioDelayFor(alarm) + waitSeconds));
+                _ = FinishPlaybackLater(alarm, generation, TimeSpan.FromSeconds(AudioDelayFor(alarm) + waitSeconds));
 
                 _lblStatus.Text += alarm.Mode == AlarmMode.NotifyOnly
                     ? $"（仅通知：{FormatWaitSeconds(waitSeconds)}后结束）"
@@ -867,9 +962,13 @@ namespace WhisperClock
             // 期间可在 Toast 上贪睡/结束，或在主界面“结束”；超时后单次闹钟删除、常规闹钟恢复。
             alarm.PendingDeleteUntil = now.AddSeconds(PendingDeleteSeconds);
 
+            // 普通模式同样走“响铃等待”：到点只停声音，状态机（确认期 / Toast 按钮 / 自动贪睡）不受影响。
+            _ = StopPlaybackLater(alarm, generation,
+                TimeSpan.FromSeconds(AudioDelayFor(alarm) + waitSeconds));
+
             _lblStatus.Text += fromSnooze
-                ? "（待确认：可结束或再贪睡）"
-                : "（待确认：可贪睡、打开或结束）";
+                ? $"（待确认：{FormatWaitSeconds(waitSeconds)}后停声，可结束或再贪睡）"
+                : $"（待确认：{FormatWaitSeconds(waitSeconds)}后停声，可贪睡、打开或结束）";
         }
 
         /// <summary>等待设置的音频延迟秒数后播放铃声；期间若已贪睡/停止/删除则不再播放。</summary>
@@ -959,9 +1058,11 @@ namespace WhisperClock
             if (Directory.Exists(path))
             {
                 var candidates = new List<string>();
-                CollectAudioCandidates(path, candidates);
+                // 环检测集合：Windows 路径大小写不敏感。
+                var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                CollectAudioCandidates(path, candidates, visited, 0);
                 if (candidates.Count > 0)
-                    return candidates[_random.Next(candidates.Count)];
+                    return candidates[Random.Shared.Next(candidates.Count)];
 
                 UpdateStatusAppend("（文件夹内没有可播放的音频）");
                 return null;
@@ -971,10 +1072,23 @@ namespace WhisperClock
             return null;
         }
 
-        /// <summary>递归收集文件夹内可播放的 .wav；文件夹里的 .lnk 快捷方式会被解析，
-        /// 目标是文件夹则继续递归收集，目标是 .wav 文件则直接加入。异常（权限/坏快捷方式）静默跳过。</summary>
-        private void CollectAudioCandidates(string folder, List<string> candidates)
+        /// <summary>音频文件夹递归扫描的深度上限（配合 visited，兜住符号链接/目录联接造成的环）。</summary>
+        private const int MaxAudioScanDepth = 24;
+
+        /// <summary>
+        /// 递归收集文件夹内可播放的 .wav；文件夹里的 .lnk 快捷方式会被解析，
+        /// 目标是文件夹则继续递归收集，目标是 .wav 文件则直接加入。异常（权限/坏快捷方式）静默跳过。
+        /// visited 记录已扫过的目录：快捷方式指回自身/祖先目录时不会无限递归
+        /// （原实现没有环检测，会 StackOverflowException 直接崩掉进程，且该异常无法 catch）。
+        /// </summary>
+        private void CollectAudioCandidates(string folder, List<string> candidates, HashSet<string> visited, int depth)
         {
+            if (depth > MaxAudioScanDepth)
+                return;
+
+            if (!visited.Add(NormalizeDirectoryPath(folder)))
+                return; // 这个目录已经扫过（快捷方式指回了自己/祖先 → 成环）
+
             try
             {
                 foreach (var wav in Directory.GetFiles(folder, "*.wav"))
@@ -992,16 +1106,30 @@ namespace WhisperClock
                     }
                     else if (Directory.Exists(target))
                     {
-                        CollectAudioCandidates(target, candidates);
+                        CollectAudioCandidates(target, candidates, visited, depth + 1);
                     }
                 }
 
                 foreach (var sub in Directory.GetDirectories(folder))
-                    CollectAudioCandidates(sub, candidates);
+                    CollectAudioCandidates(sub, candidates, visited, depth + 1);
             }
             catch
             {
                 // 权限等原因读取失败时忽略该目录。
+            }
+        }
+
+        /// <summary>目录路径规范化（全路径 + 去尾部分隔符）后作为 visited 键；失败时退回原字符串。</summary>
+        private static string NormalizeDirectoryPath(string path)
+        {
+            try
+            {
+                return Path.GetFullPath(path)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            }
+            catch
+            {
+                return path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             }
         }
 
@@ -1222,6 +1350,7 @@ namespace WhisperClock
                 {
                     string idPart = rest.Substring(0, sep);
                     string target = rest.Substring(sep + 1);
+
                     if (Guid.TryParse(idPart, out var id))
                     {
                         var alarm = _alarms.Find(a => a.Id == id);
@@ -1230,11 +1359,13 @@ namespace WhisperClock
                             OpenTarget(alarm); // 打开 + 单次闹钟自动完成
                             return;
                         }
-                        if (!string.IsNullOrWhiteSpace(target))
-                        {
-                            OpenExternal(target); // 闹钟已删除，仅打开目标
-                            return;
-                        }
+                    }
+
+                    // 闹钟已删除、或 Id 解析失败：只要目标非空就直接打开（原来 Id 解析失败会什么都不做）。
+                    if (!string.IsNullOrWhiteSpace(target))
+                    {
+                        OpenExternal(target);
+                        return;
                     }
                 }
                 else if (!string.IsNullOrWhiteSpace(rest))
@@ -1363,8 +1494,7 @@ namespace WhisperClock
             StopSound(alarm.Id); // 只停止被贪睡闹钟的声音，不影响其它正在响的闹钟
             alarm.PendingDeleteUntil = null; // 取消单次闹钟的删除，进入贪睡
             alarm.SnoozeUntil = DateTime.Now.AddMinutes(_settings.SnoozeMinutes);
-            _lblStatus.Text = $"“{alarm.Title}”已贪睡，{_settings.SnoozeMinutes} 分钟后再次提醒";
-            RefreshList();
+            RefreshList($"“{alarm.Title}”已贪睡，{_settings.SnoozeMinutes} 分钟后再次提醒");
             // 注意：这里不再 ShowFromTray/置顶——从 Toast 点“贪睡/延迟”不应弹出主界面。
         }
 
@@ -1424,6 +1554,52 @@ namespace WhisperClock
                 _lblStatus.Text += text;
         }
 
+        // ==================== 窗口 / 托盘图标 ====================
+
+        /// <summary>当前窗口 / 托盘图标；主题切换时替换并释放旧的，避免 GDI 句柄泄漏。</summary>
+        private Icon? _windowIcon;
+        private Icon? _trayIcon;
+
+        /// <summary>按当前系统主题设置窗口与托盘图标（深色主题用白线条版，浅色主题用深线条版）。</summary>
+        private void ApplyThemeIcons()
+        {
+            bool dark = ThemeManager.IsDark;
+
+            var windowIcon = AppIcon.Load(dark, SystemInformation.IconSize);
+            _windowIcon?.Dispose();
+            _windowIcon = windowIcon;
+            Icon = windowIcon;
+
+            var trayIcon = AppIcon.Load(dark, SystemInformation.SmallIconSize);
+            _trayIcon?.Dispose();
+            _trayIcon = trayIcon;
+            _notifyIcon.Icon = trayIcon;
+        }
+
+        /// <summary>系统主题切换（ThemeManager.ThemeChanged）→ 重取图标。</summary>
+        private void OnThemeChanged()
+        {
+            if (IsDisposed)
+                return;
+
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(OnThemeChanged));
+                return;
+            }
+
+            ApplyThemeIcons();
+        }
+
+        /// <summary>释放自己创建的图标。</summary>
+        private void DisposeThemeIcons()
+        {
+            _trayIcon?.Dispose();
+            _trayIcon = null;
+            _windowIcon?.Dispose();
+            _windowIcon = null;
+        }
+
         // ==================== 系统托盘 ====================
 
         private void BuildTrayIcon()
@@ -1435,8 +1611,7 @@ namespace WhisperClock
 
             _notifyIcon = new NotifyIcon
             {
-                // 托盘图标：与 exe 相同的自定义闹钟图标。
-                Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? SystemIcons.Application,
+                // 托盘图标由 ApplyThemeIcons() 按系统主题设置（深色任务栏用白线条版）。
                 Text = "Whisper（运行中）",
                 ContextMenuStrip = _trayMenu,
                 Visible = true
