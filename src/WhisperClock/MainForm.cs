@@ -22,8 +22,8 @@ namespace WhisperClock
         private const string StartupValueName = "WhisperClock";
         private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
-        /// <summary>中间态0/中间态1 的“确认期”时长（秒）：触发后（首次/贪睡后）的交互窗口，用户可点贪睡/打开/结束；超时未操作则判定自动贪睡。取 30 秒：鼠标悬停会延长 Toast 显示，8 秒易误判自动贪睡。</summary>
-        private const int PendingDeleteSeconds = 30; // 30 秒未点击 → 自动贪睡
+        // 确认期时长不再写死：由闹钟的“等待时长”（Alarm.PlayWaitSeconds，默认单次 20 秒 / 循环 1 分钟）
+        // 决定。到点仍未操作 → 自动贪睡（进中间态1，见 CheckAlarms）。
 
         private readonly System.Windows.Forms.Timer _tickTimer;
         private readonly List<Alarm> _alarms = new();
@@ -803,25 +803,6 @@ namespace WhisperClock
             }
         }
 
-        /// <summary>
-        /// 普通模式的“响铃等待”：到点只停本次响铃（清 _ringingIds），不动确认期 / 贪睡等状态机，
-        /// 也不改状态栏。期间若已触发新一轮（贪睡到点会再次 Trigger），代际不符则不动作。
-        /// </summary>
-        private async Task StopPlaybackLater(Alarm alarm, int generation, TimeSpan delay)
-        {
-            await Task.Delay(delay);
-            if (InvokeRequired)
-            {
-                BeginInvoke(new Action(() => { _ = StopPlaybackLater(alarm, generation, TimeSpan.Zero); }));
-                return;
-            }
-
-            if (!_alarms.Contains(alarm) || !IsCurrentRingGeneration(alarm, generation))
-                return;
-
-            StopSound(alarm.Id);
-        }
-
         /// <summary>核对闹钟当前的响铃代际是否仍是 generation（延迟任务到点后调用）。</summary>
         private bool IsCurrentRingGeneration(Alarm alarm, int generation)
         {
@@ -896,8 +877,9 @@ namespace WhisperClock
             => alarm.TriggerAtLogin ? 0 : Math.Max(0, _settings.AudioDelaySeconds);
 
         /// <summary>
-        /// 解析闹钟的“响铃等待时间”（秒）：闹钟自身值 &gt; 0 用它；否则按播放模式回退到
-        /// “默认模板…”的默认值（单次播放 8 秒 / 循环播放 300 秒），最后再硬编码兜底防设置损坏。
+        /// 解析闹钟的“等待时长”（秒）：触发后等这么久就走分支——普通模式到点自动贪睡（进中间态1），
+        /// 仅通知/纯提醒到点直接结束。闹钟自身值 &gt; 0 用它；否则按播放模式回退到“默认模板…”的默认值
+        /// （单次播放 20 秒 / 循环播放 60 秒），最后再硬编码兜底防设置损坏。
         /// </summary>
         private double ResolvePlayWaitSeconds(Alarm alarm)
         {
@@ -908,7 +890,7 @@ namespace WhisperClock
             if (configured > 0)
                 return configured;
 
-            return alarm.Loop ? 300 : 8;
+            return alarm.Loop ? 60 : 20;
         }
 
         /// <summary>把秒数显示成简短中文：整分钟用“N 分钟”，否则用“N 秒”。</summary>
@@ -949,7 +931,8 @@ namespace WhisperClock
                 // 响铃等待：音频开始播放后等待“响铃等待时间”再停止响铃（单次闹钟顺带删除）。
                 // 时长取闹钟自身设置，未设置则按播放模式回退到“默认模板…”的默认值
                 // （单次播放 8 秒 / 循环播放 5 分钟）；不再写死 AudioDelaySeconds + 2。
-                _ = FinishPlaybackLater(alarm, generation, TimeSpan.FromSeconds(AudioDelayFor(alarm) + waitSeconds));
+                // 等待时长到点 → 直接结束（这些模式不进状态机、不贪睡）。
+                _ = FinishPlaybackLater(alarm, generation, TimeSpan.FromSeconds(waitSeconds));
 
                 _lblStatus.Text += $"（{FormatWaitSeconds(waitSeconds)}后结束）";
                 return;
@@ -960,13 +943,9 @@ namespace WhisperClock
 
             // 触发后（首次或贪睡后再触发）都进入“待确认”中间态：
             // 期间可在 Toast 上贪睡/结束，或在主界面“结束”；超时后单次闹钟删除、常规闹钟恢复。
-            alarm.PendingDeleteUntil = now.AddSeconds(PendingDeleteSeconds);
+            alarm.PendingDeleteUntil = now.AddSeconds(waitSeconds);
 
-            // 普通模式同样走“响铃等待”：到点只停声音，状态机（确认期 / Toast 按钮 / 自动贪睡）不受影响。
-            _ = StopPlaybackLater(alarm, generation,
-                TimeSpan.FromSeconds(AudioDelayFor(alarm) + waitSeconds));
-
-            _lblStatus.Text += $"（{FormatWaitSeconds(waitSeconds)}后停声）";
+            _lblStatus.Text += $"（{FormatWaitSeconds(waitSeconds)}后自动贪睡）";
         }
 
         /// <summary>等待设置的音频延迟秒数后播放铃声；期间若已贪睡/停止/删除则不再播放。</summary>

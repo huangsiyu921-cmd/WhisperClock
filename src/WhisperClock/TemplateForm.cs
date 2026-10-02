@@ -147,11 +147,11 @@ namespace WhisperClock
             _rbOnce.Checked = !_settings.DefaultLoop;
             _chkOneShot.Checked = _settings.DefaultOneShot;
 
-            // 响铃等待时间（秒）：单次播放默认 8 秒、循环播放默认 300 秒（5 分钟）。
+            // 等待时长（秒）：单次播放默认 20 秒、循环播放默认 60 秒。
             WaitTimeInput.SetSeconds(_numWaitOnce, _cmbWaitOnceUnit,
-                _settings.DefaultPlayWaitSecondsOnce > 0 ? _settings.DefaultPlayWaitSecondsOnce : 8);
+                _settings.DefaultPlayWaitSecondsOnce > 0 ? _settings.DefaultPlayWaitSecondsOnce : 20);
             WaitTimeInput.SetSeconds(_numWaitLoop, _cmbWaitLoopUnit,
-                _settings.DefaultPlayWaitSecondsLoop > 0 ? _settings.DefaultPlayWaitSecondsLoop : 300);
+                _settings.DefaultPlayWaitSecondsLoop > 0 ? _settings.DefaultPlayWaitSecondsLoop : 60);
         }
 
         private void Save()

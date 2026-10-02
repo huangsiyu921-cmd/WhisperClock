@@ -243,11 +243,11 @@ namespace WhisperClock
             _numRandomOffset.Enabled = !login;
         }
 
-        /// <summary>“默认模板…”里按播放模式给出的默认响铃等待时间（秒）。</summary>
+        /// <summary>“默认模板…”里按播放模式给出的默认等待时长（秒）。</summary>
         private double WaitDefaultSeconds(bool loop)
         {
             double value = loop ? _settings.DefaultPlayWaitSecondsLoop : _settings.DefaultPlayWaitSecondsOnce;
-            return value > 0 ? value : loop ? 300 : 8;
+            return value > 0 ? value : loop ? 60 : 20;
         }
 
         /// <summary>
